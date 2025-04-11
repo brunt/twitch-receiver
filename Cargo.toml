@@ -1,0 +1,32 @@
+[package]
+name = "twitch-receiver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "6.0.0"
+tmi = "0.9.0"
+anyhow = "1.0.97"
+tokio = { version = "1.44.1", features = ["full"] }
+winnow = "0.7.4"
+iroh-blobs = { version = "0.34.1", features = ["net_protocol"]}
+dotenv = "0.15.0"
+iroh = "0.34.1"
+n0-future = "0.1.2"
+arboard = "3.4.1"
+walkdir = "2.4.0"
+serde = { version = "1", features = ["derive"] }
+rand = "0.8.5"
+async-channel = "2.3.1"
+futures-buffered = "0.2.4"
+futures-lite = "2.3.0"
+num_cpus = "1.16.0"
+
+
+[profile.release]
+opt-level = 3
+overflow-checks = false
+debug-assertions = false
+lto = true
+debug = false
+panic = "abort"
