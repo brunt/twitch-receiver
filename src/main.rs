@@ -8,7 +8,6 @@ use receiver::receive;
 use std::fs;
 use std::str::FromStr;
 
-// TODO: use in-memory data store, move receive function to this cargo project, clean up unused stuff, move it all to new repo
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();

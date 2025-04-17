@@ -1,5 +1,5 @@
 use anyhow::Context;
-use iroh::{discovery::dns::DnsDiscovery, Endpoint, RelayMap, RelayMode, RelayUrl, SecretKey};
+use iroh::{discovery::dns::DnsDiscovery, Endpoint, RelayMode, SecretKey};
 use iroh_blobs::{
     format::collection::Collection,
     get::{
@@ -11,81 +11,9 @@ use iroh_blobs::{
     HashAndFormat,
 };
 use std::{
-    fmt::{Display, Formatter},
     path::{Path, PathBuf},
     str::FromStr,
 };
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum Format {
-    #[default]
-    Hex,
-    Cid,
-}
-
-impl FromStr for Format {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "hex" => Ok(Format::Hex),
-            "cid" => Ok(Format::Cid),
-            _ => Err(anyhow::anyhow!("invalid format")),
-        }
-    }
-}
-
-impl Display for Format {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Format::Hex => write!(f, "hex"),
-            Format::Cid => write!(f, "cid"),
-        }
-    }
-}
-
-/// Available command line options for configuring relays.
-#[derive(Clone, Debug)]
-pub enum RelayModeOption {
-    /// Disables relays altogether.
-    Disabled,
-    /// Uses the default relay servers.
-    Default,
-    /// Uses a single, custom relay server by URL.
-    Custom(RelayUrl),
-}
-
-impl FromStr for RelayModeOption {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "disabled" => Ok(Self::Disabled),
-            "default" => Ok(Self::Default),
-            _ => Ok(Self::Custom(RelayUrl::from_str(s)?)),
-        }
-    }
-}
-
-impl Display for RelayModeOption {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Disabled => f.write_str("disabled"),
-            Self::Default => f.write_str("default"),
-            Self::Custom(url) => url.fmt(f),
-        }
-    }
-}
-
-impl From<RelayModeOption> for RelayMode {
-    fn from(value: RelayModeOption) -> Self {
-        match value {
-            RelayModeOption::Disabled => RelayMode::Disabled,
-            RelayModeOption::Default => RelayMode::Default,
-            RelayModeOption::Custom(url) => RelayMode::Custom(RelayMap::from_url(url)),
-        }
-    }
-}
 
 /// Get the secret key or generate a new one.
 ///
@@ -195,19 +123,13 @@ pub async fn receive(ticket: BlobTicket, dest: &Path) -> anyhow::Result<()> {
         builder = builder.add_discovery(|_| Some(DnsDiscovery::n0_dns()));
     }
     let endpoint = builder.bind().await?;
-    let dir_name = format!(".sendme-get-{}", ticket.hash().to_hex());
-    let iroh_data_dir = dirs::home_dir()
-        .map(|home| home.join("Downloads").join(dir_name))
-        .unwrap_or_default();
-    let db = iroh_blobs::store::fs::Store::load(&iroh_data_dir).await?;
+    let db = iroh_blobs::store::mem::Store::new();
     if let Ok(connection) = endpoint.connect(addr, iroh_blobs::protocol::ALPN).await {
         let hash_and_format = HashAndFormat {
             hash: ticket.hash(),
             format: ticket.format(),
         };
-        let (send, _) = async_channel::bounded(32);
-
-        let progress = iroh_blobs::util::progress::AsyncChannelProgressSender::new(send);
+        let progress = iroh_blobs::util::progress::IgnoreProgressSender::default();
         let (_hash_seq, _) =
             get_hash_seq_and_sizes(&connection, &hash_and_format.hash, 1024 * 1024 * 32)
                 .await
@@ -223,7 +145,6 @@ pub async fn receive(ticket: BlobTicket, dest: &Path) -> anyhow::Result<()> {
             }
         }
         export(db, collection, dest).await?;
-        tokio::fs::remove_dir_all(iroh_data_dir).await?;
     }
 
     Ok(())
